@@ -1,0 +1,6 @@
+// Without this file Gradle derives the root project name (and therefore the published
+// artifactId) from the checkout directory name, which makes the Maven coordinate depend
+// on where the repository happens to be cloned. Pin it explicitly.
+//
+// Published coordinate:  jp.clip:whisper-ffm:<version from gradle.properties>
+rootProject.name = 'whisper-ffm'

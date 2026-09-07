@@ -1,0 +1,68 @@
+# jar に同梱する Windows 用ネイティブを用意し、テストまで通す。
+#
+# ネイティブは原則 whisper.cpp の公式リリースから取る（scripts/download-natives.ps1）。
+# そのタグに Windows バイナリが添付されていない場合だけ、submodule を本家の CMake で
+# ビルドする（scripts/build-whisper.ps1）。どちらを使ったかはログに出る。
+#
+# 成果物は Artifacts の windows-x64-natives に出る。手元に CMake や MSVC が無くても
+# DLL を入手できる。
+name: Windows natives
+
+on:
+    workflow_dispatch:
+    push:
+        branches: [main]
+        tags: ['v*']
+        paths:
+            - 'scripts/download-natives.ps1'
+            - 'scripts/build-whisper.ps1'
+            - 'scripts/jextract-whisper.ps1'
+            - 'src/main/java/jp/clip/whisper/ffm/**'
+            - 'gradle.properties'
+            - '.github/workflows/windows-natives.yml'
+
+jobs:
+    natives:
+        runs-on: windows-latest
+        steps:
+            -   uses: actions/checkout@v4
+                with:
+                    submodules: true
+            -   uses: actions/setup-java@v4
+                with:
+                    java-version: 25
+                    distribution: 'temurin'
+
+            -   name: Fetch natives (official release, fall back to building the submodule)
+                shell: powershell
+                run: |
+                    .\scripts\download-natives.ps1
+                    if($LASTEXITCODE -ne 0)
+                    {
+                        Write-Host "公式バイナリが無いので submodule からビルドします"
+                        .\scripts\build-whisper.ps1
+                        if($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                    }
+
+            -   name: Download test models
+                shell: powershell
+                run: |
+                    .\scripts\download-test-model.ps1
+                    .\scripts\download-vad-model.ps1
+                    Move-Item .\ggml-silero-v6.2.0.bin .\src\main\resources\ -Force
+
+            -   name: Test
+                run: ./gradlew test
+
+            -   name: Publish test report
+                uses: mikepenz/action-junit-report@v5
+                if: success() || failure()
+                with:
+                    report_paths: '**/build/test-results/**/*.xml'
+
+            -   name: Upload natives
+                uses: actions/upload-artifact@v4
+                with:
+                    name: windows-x64-natives
+                    path: natives/*.dll
+                    retention-days: 30

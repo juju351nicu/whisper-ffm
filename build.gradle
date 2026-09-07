@@ -1,0 +1,260 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'org.jreleaser' version '1.26.0'
+    // Lombok: compileOnly / annotationProcessor の配線と、javadoc 用の delombok を自動設定する
+    id 'io.freefair.lombok' version '9.5.0'
+}
+
+group = 'jp.clip'
+version = project.version
+description = 'whisper.cpp bindings for Java, built on the Foreign Function & Memory API (Java 22+).'
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+lombok {
+    // JDK 25 でビルドするには 1.18.40 以上が必要
+    version = '1.18.48'
+}
+
+dependencies {
+    api 'org.slf4j:slf4j-api:2.0.16'
+
+    testImplementation platform("org.junit:junit-bom:${junitVersion}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.slf4j:slf4j-simple:2.0.16'
+
+    // Gradle 9 no longer injects the test framework implementation automatically,
+    // so the JUnit Platform launcher has to be declared explicitly.
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+java {
+    // Try to keep this as low as possible.
+    // In a perfect world, this would be Java 8.
+    //
+    // NOTE: FFM (java.lang.foreign) が正式版になったのが Java 22 なので、v2 以降はここが下限。
+    // ビルド自体は Java 25 (Gradle 9) で行うが、利用側に要求するのは Java 22+。
+    sourceCompatibility = JavaVersion.VERSION_22
+    targetCompatibility = JavaVersion.VERSION_22
+
+    withSourcesJar()
+    withJavadocJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    // Compile against the Java 22 API even when building with a newer JDK (e.g. Java 25).
+    options.release = 22
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.encoding = 'UTF-8'
+    options.source = '22'
+    // 日本語 Javadoc が化けないように出力側の文字コードも固定する
+    options.docEncoding = 'UTF-8'
+    options.charSet = 'UTF-8'
+    // Lombok が生成するアクセサには @return / @param が付かないので "missing" だけ doclint から外す
+    options.addStringOption('Xdoclint:all,-missing', '-quiet')
+}
+
+// jextract が生成した FFM バインディング (jp.clip.whisper.ffm.gen) は機械生成物なので、
+// Javadoc 規約（日本語で書く・doclint）の対象外にする。sources jar にも入れない。
+def generatedFfmBindings = 'jp/clip/whisper/ffm/gen/**'
+
+tasks.named('javadoc', Javadoc) {
+    exclude generatedFfmBindings
+}
+
+tasks.named('sourcesJar', Jar) {
+    exclude generatedFfmBindings
+}
+
+// 同梱ネイティブの一覧 natives.list を <os>-<arch>/ ごとに生成する。
+// Spring Boot の実行可能 jar（jar の中の jar）では jar 内のディレクトリを走査できないため、
+// BundledResources はこの一覧を読んでファイルを 1 つずつ取り出す。
+tasks.named('processResources') {
+    doLast {
+        def nativeDirs = destinationDir.listFiles({ File f -> f.isDirectory() && f.name ==~ /(windows|mac|linux)-(x64|x86|arm64)/ } as FileFilter) ?: []
+        nativeDirs.each { File dir ->
+            def natives = dir.listFiles({ File f -> f.isFile() && f.name ==~ /.*\.(dll|so|dylib)(\.\d+)*$/ } as FileFilter).collect { it.name }.sort()
+            new File(dir, 'natives.list').text = natives.join('\n') + '\n'
+            logger.lifecycle("natives.list: ${dir.name} -> ${natives}")
+        }
+    }
+}
+
+// scripts/download-natives が natives/ に置いたネイティブを、実行中の OS 用の同梱先へコピーする。
+//   .\gradlew.bat installNatives publishToMavenLocal
+tasks.register('installNatives', Copy) {
+    group = 'whisper-ffm'
+    description = 'Copies natives/* into src/main/resources/<os>-<arch>/ so the jar bundles them'
+
+    def osName = System.getProperty('os.name').toLowerCase()
+    def os = osName.contains('win') ? 'windows' : osName.contains('mac') ? 'mac' : 'linux'
+    def archName = System.getProperty('os.arch').toLowerCase()
+    def arch = archName in ['amd64', 'x86_64', 'x86-64'] ? 'x64' : archName == 'aarch64' ? 'arm64' : archName
+
+    from('natives') {
+        include '*.dll', '*.so', '*.so.*', '*.dylib'
+    }
+    into "src/main/resources/${os}-${arch}"
+    doFirst {
+        if (!file('natives').isDirectory()) {
+            throw new GradleException('natives/ がありません。先に scripts/download-natives.ps1 を実行してください。')
+        }
+    }
+}
+
+// installNatives は src/main/resources に書き込む。src/main/resources を読むタスクは
+// processResources だけでなく sourcesJar / delombok / javadoc など複数あり、Gradle 9 は
+// 「順序が宣言されていない」と個別にエラーにするので、他の全タスクを installNatives の後に回す。
+tasks.configureEach { Task task ->
+    if (task.name != 'installNatives') {
+        task.mustRunAfter('installNatives')
+    }
+}
+
+// Apache-2.0 では、配布物に LICENSE と NOTICE を含める必要がある。
+tasks.named('jar', Jar) {
+    metaInf {
+        from(rootProject.file('LICENSE'))
+        from(rootProject.file('NOTICE'))
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    testLogging.showStandardStreams = true
+
+    // JDK 22 introduced --enable-native-access and JDK 24+ prints a loud warning when
+    // native code is called from an unnamed module. This library calls native code by
+    // design, so grant it explicitly.
+    def testJavaMajor = Integer.parseInt(JavaVersion.current().majorVersion)
+    if (testJavaMajor >= 22) {
+        jvmArgs '--enable-native-access=ALL-UNNAMED'
+    }
+}
+
+// 高速化の計測（Step 5）。使い方は src/test/java/jp/clip/whisper/Benchmark.java の Javadoc を参照。
+//   .\gradlew.bat benchmark "-Pbench.audio=C:\audio\meeting.wav" "-Pbench.models=models\ggml-small.bin;models\ggml-large-v3-turbo-q5_0.bin" "-Pbench.threads=4,8,12" "-Pbench.vad=both"
+tasks.register('benchmark', JavaExec) {
+    group = 'whisper-ffm'
+    description = 'Measures transcription speed (RTF) for model x threads x VAD combinations'
+
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'jp.clip.whisper.Benchmark'
+
+    // -Pbench.<key>=<value> をそのまま key=value 引数として渡す
+    args = project.properties.findAll { it.key.startsWith('bench.') }.collect { "${it.key.substring(6)}=${it.value}" }
+
+    // 計測中は whisper.cpp のログ（モデル読み込みの INFO など）を黙らせる
+    systemProperty 'org.slf4j.simpleLogger.defaultLogLevel', 'warn'
+    systemProperty 'file.encoding', 'UTF-8'
+    systemProperty 'stdout.encoding', 'UTF-8'
+    systemProperty 'stderr.encoding', 'UTF-8'   // 日本語の例外メッセージが化けないように
+
+    def benchJavaMajor = Integer.parseInt(JavaVersion.current().majorVersion)
+    if (benchJavaMajor >= 22) {
+        jvmArgs '--enable-native-access=ALL-UNNAMED'
+    }
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+
+            pom {
+                // Apparently you need to do this because it doesn't get autofilled (at least for description)
+                name = project.name
+                description = project.description
+                url = 'https://github.com/juju351nicu/whisper-ffm'
+
+                licenses {
+                    license {
+                        // LICENSE ファイルと一致させること。同梱するネイティブ (whisper.cpp,
+                        // silero-vad) は MIT で、その表記は NOTICE にある。
+                        name = 'Apache License, Version 2.0'
+                        url = 'https://www.apache.org/licenses/LICENSE-2.0'
+                    }
+                }
+
+                developers {
+                    developer {
+                        id = 'juju351nicu'
+                        name = 'juju351nicu'
+                        url = 'https://github.com/juju351nicu'
+                    }
+                }
+
+                scm {
+                    connection = 'scm:git:https://github.com/juju351nicu/whisper-ffm.git'
+                    developerConnection = 'scm:git:ssh://github.com/juju351nicu/whisper-ffm.git'
+                    url = 'https://github.com/juju351nicu/whisper-ffm'
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            url = layout.buildDirectory.dir('staging-deploy')
+        }
+    }
+}
+
+jreleaser {
+    signing {
+        active = 'ALWAYS'
+        armored = true
+    }
+
+    deploy {
+        maven {
+            mavenCentral {
+                sonatype {
+                    active = 'ALWAYS'
+                    url = 'https://central.sonatype.com/api/v1/publisher'
+                    stagingRepository('build/staging-deploy')
+
+                    // Double the retry delay as publishing takes a long time
+                    // Alternatively you can set JRELEASER_MAVENCENTRAL_STAGE: UPLOAD and manually publish
+                    retryDelay = 40
+                }
+            }
+        }
+    }
+}
+
+// Custom tasks for ease of use
+tasks.register('deployLocal') {
+    group = 'whisper-ffm'
+    description = 'Convenience method to publish to maven local'
+
+    dependsOn 'clean', 'build', 'publish'
+    finalizedBy 'publishToMavenLocal'
+
+    doLast {
+        logger.lifecycle("Published version ${project.version}")
+    }
+}
+
+tasks.named('build') { mustRunAfter tasks.named('clean') }
+tasks.named('publish') { mustRunAfter tasks.named('build') }
+
+tasks.register('deployMaven') {
+    group = 'whisper-ffm'
+    description = 'Convenience method to publish to maven central'
+
+    dependsOn tasks.named('deployLocal')
+    finalizedBy 'jreleaserDeploy'
+}
+
+// Always republish to ~/.m2 even if nothing changed
+//tasks.named('publishToMavenLocal') {
+//    outputs.upToDateWhen { false }   // disable incremental check
+//}
