@@ -18,8 +18,13 @@ Java 22 の **FFM（Foreign Function &amp; Memory API、`java.lang.foreign`）**
 whisper.cpp の関数は、jextract が `whisper.h` から生成したバインディング
 （`jp.clip.whisper.ffm.gen`）を通して呼びます。この方式には次の利点があります。
 
-- **C++ のビルドが要らない。** whisper.cpp の公式リリースバイナリをそのまま置けます。
-  新しい OS やアーキテクチャに対応するのに、こちらでツールチェーンを用意する必要がありません。
+- **自作の C++ が要らない。** JNI 版では `whisper.h` を呼ぶブリッジ（`.cpp`）を自分で書いて
+  ビルドし、シンボル名・クラス名・フィールド名の 3 種類の文字列を Java 側と手で合わせていました。
+  FFM ではそのブリッジが丸ごと不要になり、必要なのは whisper.cpp 側の共有ライブラリだけです。
+  公式リリースに OS 用のバイナリが添付されていればそれをそのまま置けます。添付が無いタグ
+  （v1.9.3 の Windows がこれ）では whisper.cpp 自体を CMake でビルドしますが、それは本家の
+  ビルド手順そのままで、こちらで保守する C++ コードはありません
+  （`scripts/build-whisper.ps1` と `.github/workflows/windows-natives.yml` が自動でやります）。
 - **whisper.cpp の更新に追従しやすい。** submodule を進めて
   `scripts/jextract-whisper.ps1` を実行するだけで、シグネチャや構造体レイアウトの変更が
   コンパイルエラーとして出ます。

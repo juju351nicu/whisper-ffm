@@ -179,6 +179,36 @@ tasks.register('benchmark', JavaExec) {
     }
 }
 
+// jar に同梱したネイティブだけで文字起こしできるかを確かめる（BundledNativesSmoke の Javadoc も参照）。
+//
+// test タスクでは埋まらない穴を埋めるためのタスク。WhisperEngineTest は natives/ があればそこから
+// 読み込むので、CI では「jar の中から取り出す」という利用側アプリと同じ経路を一度も通らない。
+// ここではクラスパスから sourceSets.main.output（build/classes/java/main と build/resources/main）を
+// 外し、jar だけを見せる。テストクラス側は test の出力に残るので実行できる。
+//
+//   .\gradlew.bat installNatives jar smokeTestBundledNatives
+tasks.register('smokeTestBundledNatives', JavaExec) {
+    group = 'verification'
+    description = 'Transcribes jfk.wav using only the natives bundled in the jar (no natives/ directory)'
+
+    dependsOn 'jar', 'testClasses'
+
+    // jar 本体 + テストの依存（JUnit や SLF4J 実装）。main の出力は引く
+    classpath = files(tasks.named('jar', Jar).flatMap { it.archiveFile }) +
+            (sourceSets.test.runtimeClasspath - sourceSets.main.output)
+    mainClass = 'jp.clip.whisper.BundledNativesSmoke'
+
+    systemProperty 'org.slf4j.simpleLogger.defaultLogLevel', 'info'
+    systemProperty 'file.encoding', 'UTF-8'
+    systemProperty 'stdout.encoding', 'UTF-8'
+    systemProperty 'stderr.encoding', 'UTF-8'   // 日本語の例外メッセージが化けないように
+
+    def smokeJavaMajor = Integer.parseInt(JavaVersion.current().majorVersion)
+    if (smokeJavaMajor >= 22) {
+        jvmArgs '--enable-native-access=ALL-UNNAMED'
+    }
+}
+
 publishing {
     publications {
         maven(MavenPublication) {

@@ -136,7 +136,7 @@ whisper.cpp の submodule を更新したときの手順:
 
 ```
 whisper-ffm/
-├── .github/workflows/            CI。windows-natives.yml（ネイティブ取得 + テスト。Windows x64 のみ）
+├── .github/workflows/            CI。windows-natives.yml（ネイティブ取得 + テスト + jar 同梱経路のスモーク。Windows x64 のみ）
 ├── docs/                         plan-ffm-v2.md（v2 の計画と実施記録）、ffm-p0-report.md（生成 API の資料）
 ├── scripts/                      ネイティブ取得・バインディング生成・モデル取得
 ├── models/                       計測用モデルの置き場所（ggml-*.bin は gitignore）
@@ -177,6 +177,10 @@ Move-Item .\ggml-silero-v6.2.0.bin .\src\main\resources\ -Force
 
 - jar に同梱して配布するときは `gradlew installNatives publishToMavenLocal`
   （`natives\` → `src/main/resources/<os>-<arch>/`、`natives.list` を自動生成）
+- **jar 同梱のネイティブを使う経路は `gradlew installNatives jar smokeTestBundledNatives` で確かめる。**
+  `test` は `natives\` があればそこから読むので、利用側アプリ（transcribe-shell 等）と同じ
+  「jar の中から取り出す」経路を通らない。ネイティブの同梱・取り出し・`natives.list` を触ったら必ず実行する
+  （`BundledNativesSmoke.java` の Javadoc に理由とクラスパスの都合を書いてある）
 - 高速化の計測は `gradlew benchmark "-Pbench.audio=..." "-Pbench.models=..."`（`Benchmark.java` の Javadoc 参照）。
   モデルの取得は `scripts\download-model.ps1 <モデル名>` → `models\` に置かれる
 - Gradle が `Could not initialize native services` で落ちる場合は

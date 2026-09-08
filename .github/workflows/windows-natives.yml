@@ -25,6 +25,12 @@ on:
             - 'gradle/**'
             - '.github/workflows/windows-natives.yml'
 
+# 既定のトークンは読み取りだけなので、テスト結果を Checks に書く action_junit_report が
+# 「Resource not accessible by integration」でログにエラーを残す。必要な権限だけ明示する。
+permissions:
+    contents: read
+    checks: write
+
 jobs:
     natives:
         runs-on: windows-latest
@@ -83,8 +89,16 @@ jobs:
                 with:
                     report_paths: '**/build/test-results/**/*.xml'
 
+            # 利用側アプリ（transcribe-shell 等）は natives/ を持たず、jar の中の <os>-<arch>/ から
+            # DLL を取り出して読み込む。test タスクは natives/ があればそちらを使うので、
+            # この経路だけは一度も検証されていなかった。詳細は BundledNativesSmoke の Javadoc。
+            -   name: Smoke test the natives bundled in the jar
+                run: ./gradlew installNatives jar smokeTestBundledNatives
+
+            # スモークが落ちたときも DLL は手元で調べたいので、失敗しても上げる
             -   name: Upload natives
                 uses: actions/upload-artifact@v4
+                if: success() || failure()
                 with:
                     name: windows-x64-natives
                     path: natives/*.dll
