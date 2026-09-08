@@ -144,6 +144,8 @@ try (WhisperEngine engine = WhisperEngine.open(config))
 | `temperatureIncrement` | 0.2 | `temperature_inc` |
 | `entropyThreshold` | 2.4 | `entropy_thold` |
 | `suppressNonSpeechTokens` | false | `suppress_nst` |
+| `maxTextContext` | 16384 | `n_max_text_ctx` |
+| `carryInitialPrompt` | false | `carry_initial_prompt` |
 
 `bestOf` と `temperatureIncrement` は、認識が破綻したとき（`entropyThreshold` を割ったとき）に
 温度を上げてやり直す動作を決めます。温度 0.0 では候補は 1 本しか走らないので、通常時の速度には
@@ -156,6 +158,24 @@ try (WhisperEngine engine = WhisperEngine.open(config))
 > の「(a) の実測」）。**用途ごとに実測して決めてください。** 既定値を whisper.cpp に合わせているのは
 > 「上流と同じ結果になること」を優先しているためで、日本語会議録音に最適だからではありません。
 
+### 繰り返しループと初期プロンプト（`maxTextContext` / `carryInitialPrompt`）
+
+whisper.cpp は音声を 30 秒のウィンドウに切って順に処理し、**前のウィンドウの出力を次のウィンドウの
+プロンプトに引き継ぎます**。これが「同じ行が何十回も続く」繰り返しループの伝播経路です
+（1 度出た行が次のウィンドウのプロンプトになり、さらに同じ行を誘発する）。faster-whisper には
+`compression_ratio_threshold` による繰り返し検出がありますが、whisper.cpp には相当機能がありません。
+
+- `maxTextContext`（`-mc` 相当）を小さくすると引き継ぎが減ります。**ただし 0 にすると
+  `initialPrompt` も効かなくなります。** whisper.cpp のプロンプト構築が `if (n_max_text_ctx > 0)` の
+  中にあるため、0 では初期プロンプトを含めて一切プロンプトを渡しません。
+- `carryInitialPrompt` を true にすると、引き継ぎ用のバッファが**今回のウィンドウの出力だけ**になり、
+  初期プロンプトは静的な別枠として**毎ウィンドウに前置**されます。固有名詞のヒントを音声全体に
+  効かせたまま、繰り返しの伝播を短く抑えられます。
+
+長い会議録音で固有名詞を安定させたい場合は、`maxTextContext` は既定のままにして
+`carryInitialPrompt(true)` と `initialPrompt(...)` を組み合わせるのが出発点です。
+プロンプトを使わないなら `maxTextContext(0)` が最も単純な対策になります。
+
 `suppressNonSpeechTokens` を true にすると非発話トークンを抑制します。対象は whisper.cpp が
 持つ**固定の記号リスト**（``" # ( ) * + / : ; < = > @ [ \ ] ^ _ ` { | } ~ 「 」 『 』 ♪ ♫ ♬`` など）で、
 `【` `】` は含まれません。したがって「【アイテム】」のような字幕由来のハルシネーションは
@@ -166,6 +186,8 @@ WhisperConfig config = WhisperConfig.builder()
         .model(model)
         .language("ja")
         .suppressNonSpeechTokens(true)   // 注記を出さない
+        .initialPrompt("姓Cさん、姓Dさんが参加する定例会議です。")
+        .carryInitialPrompt(true)        // 固有名詞のヒントを全ウィンドウに効かせる
         .build();
 ```
 

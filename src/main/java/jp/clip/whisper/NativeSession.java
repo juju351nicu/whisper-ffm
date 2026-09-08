@@ -157,6 +157,9 @@ final class NativeSession implements AutoCloseable
 		whisper_full_params.detect_language(params, this.config.detectLanguage());
 		whisper_full_params.translate(params, this.config.translateToEnglish());
 		whisper_full_params.initial_prompt(params, allocateString(arena, this.config.initialPrompt()));
+		// 0 にすると初期プロンプトごと無効になる点は WhisperConfig#maxTextContext の Javadoc 参照
+		whisper_full_params.n_max_text_ctx(params, this.config.maxTextContext());
+		whisper_full_params.carry_initial_prompt(params, this.config.carryInitialPrompt());
 
 		// 結果は Java 側で受け取るので、whisper.cpp 側の標準出力は進捗以外すべて止める
 		whisper_full_params.print_progress(params, this.config.printNativeProgress());

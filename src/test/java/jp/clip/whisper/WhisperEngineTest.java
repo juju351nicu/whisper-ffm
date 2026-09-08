@@ -123,6 +123,8 @@ public class WhisperEngineTest
 		assertEquals(0.2f, config.temperatureIncrement(), "temperature_inc");
 		assertEquals(2.4f, config.entropyThreshold(), "entropy_thold");
 		assertFalse(config.suppressNonSpeechTokens(), "suppress_nst");
+		assertEquals(16384, config.maxTextContext(), "n_max_text_ctx");
+		assertFalse(config.carryInitialPrompt(), "carry_initial_prompt");
 		assertEquals(100.0f, config.grammarPenalty(), "grammar_penalty");
 
 		assertEquals(0.5f, config.vadThreshold());
@@ -130,6 +132,37 @@ public class WhisperEngineTest
 		assertEquals(100, config.vadMinSilenceDurationMs());
 		assertEquals(30, config.vadSpeechPadMs());
 		assertEquals(0.1f, config.vadSamplesOverlap());
+	}
+
+	/**
+	 * {@code n_max_text_ctx} と {@code carry_initial_prompt} が構造体の正しい位置に書けていることを確かめます。
+	 *
+	 * <p>
+	 * どちらも既定から外れた値を渡しても文字起こしが壊れないことだけを見ます（jfk.wav は 30 秒に収まる
+	 * 1 ウィンドウなので、引き継ぎの有無そのものは結果に現れません）。オフセットを間違えると別の
+	 * フィールドを壊してクラッシュするか結果が崩れるため、この程度でも十分な番人になります。
+	 * </p>
+	 */
+	@Test
+	public void contextSettingsAreAcceptedByNativeLayer()
+	{
+		WhisperConfig noCarryOver = baseConfig()
+				.maxTextContext(0)
+				.initialPrompt("This is a speech by a president.")
+				.build();
+		try(WhisperEngine engine = WhisperEngine.open(noCarryOver))
+		{
+			assertTrue(engine.transcribe(SAMPLE_PATH).text().contains("fellow Americans"));
+		}
+
+		WhisperConfig carryOver = baseConfig()
+				.carryInitialPrompt(true)
+				.initialPrompt("This is a speech by a president.")
+				.build();
+		try(WhisperEngine engine = WhisperEngine.open(carryOver))
+		{
+			assertTrue(engine.transcribe(SAMPLE_PATH).text().contains("fellow Americans"));
+		}
 	}
 
 	@Test

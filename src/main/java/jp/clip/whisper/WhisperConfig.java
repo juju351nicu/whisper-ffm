@@ -101,7 +101,9 @@ public class WhisperConfig
 	 * <p>
 	 * 認識が破綻して（{@link #entropyThreshold} などを割って）やり直すときだけ効きます。
 	 * 温度 0.0 では 1 本しか走らないので、通常時の速度には影響しません。
-	 * 1 以下にすると候補が 1 本に丸められ、同じ行が繰り返されるループから抜けにくくなります。
+	 * 1 以下にすると whisper.cpp 内部で {@code n_decoders = max(1, best_of)} と丸められ、候補が 1 本になります。
+	 * ただし「候補を増やせばループから抜けやすい」という効果は実測では確認できていません
+	 * （{@code docs/plan-ffm-v2.md} の「(a) の実測」）。用途ごとに測って決めてください。
 	 * </p>
 	 */
 	@Builder.Default
@@ -128,6 +130,44 @@ public class WhisperConfig
 	 */
 	@Builder.Default
 	float temperatureIncrement = 0.2f;
+
+	/**
+	 * 直前までのテキストをプロンプトとして何トークンまで使うか。
+	 * {@code whisper_full_params.n_max_text_ctx}。既定は 16384（whisper.cpp と同じ。実効上限は 224）。
+	 *
+	 * <p>
+	 * whisper.cpp は音声を 30 秒のウィンドウに切って順に処理し、前のウィンドウの出力を次のウィンドウの
+	 * プロンプトに引き継ぎます。これが繰り返しループの伝播経路になります（同じ行が出ると、それが次の
+	 * ウィンドウのプロンプトになり、さらに同じ行を誘発する）。この値を小さくすると引き継ぎが減ります。
+	 * </p>
+	 *
+	 * <p>
+	 * <b>0 にすると {@link #initialPrompt} も効かなくなります。</b>whisper.cpp のプロンプト構築は
+	 * {@code if (n_max_text_ctx > 0)} の中にあるため、0 では初期プロンプトを含めて一切プロンプトを渡しません。
+	 * 固有名詞のヒントを効かせたまま引き継ぎを抑えたい場合は、この値は既定のままにして
+	 * {@link #carryInitialPrompt} を true にしてください。
+	 * </p>
+	 */
+	@Builder.Default
+	int maxTextContext = 16384;
+
+	/**
+	 * {@link #initialPrompt} を毎ウィンドウの先頭に付け直すかどうか。
+	 * {@code whisper_full_params.carry_initial_prompt}。既定は false（whisper.cpp と同じ）。
+	 *
+	 * <p>
+	 * false のとき、引き継ぎ用のバッファには「前のウィンドウのプロンプト + 今回の出力」が積み上がります。
+	 * 初期プロンプトは最初のウィンドウで押し出されて薄まり、代わりに直前の出力が支配的になります。
+	 * </p>
+	 *
+	 * <p>
+	 * true のとき、引き継ぎ用のバッファは<b>今回のウィンドウの出力だけ</b>になり、初期プロンプトは静的な
+	 * 別枠として毎ウィンドウに前置されます。結果として、固有名詞のヒントを音声全体に効かせつつ、
+	 * 繰り返しの伝播を短く抑えられます。長い会議録音で固有名詞を安定させたい用途ではこちらが向きます。
+	 * </p>
+	 */
+	@Builder.Default
+	boolean carryInitialPrompt = false;
 
 	/**
 	 * 非発話トークン（{@code [音楽]} {@code (笑)} {@code ♪} のような注記）を抑制するかどうか。
