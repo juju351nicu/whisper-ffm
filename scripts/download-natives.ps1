@@ -13,6 +13,11 @@
 	（v1.9.3 がそうだった）。その場合はメッセージの指示に従って
 	scripts\build-whisper.ps1 で whisper.cpp 本家の CMake からビルドすること。
 
+	失敗の伝え方: 呼び出し側が「取得できなければビルドに切り替える」と分岐できるよう、
+	終了エラーを投げずに exit 1 で失敗を伝える。$ErrorActionPreference = 'Stop' の下で
+	Write-Error を使うと終了エラーになり、呼び出し側のスクリプトごとその場で止まってしまう
+	（CI がこれで落ちていた）。メッセージは $host.UI.WriteErrorLine で stderr へ書く。
+
 .PARAMETER Tag
 	whisper.cpp のリリースタグ。既定は gradle.properties の whisperCppVersion に v を付けたもの。
 
@@ -38,7 +43,7 @@ if(-not $Tag)
 	$line = Select-String -Path "gradle.properties" -Pattern '^whisperCppVersion=(.+)$'
 	if(-not $line)
 	{
-		Write-Error "gradle.properties に whisperCppVersion がありません。-Tag で明示してください。"
+		$host.UI.WriteErrorLine("gradle.properties に whisperCppVersion がありません。-Tag で明示してください。")
 		exit 1
 	}
 	$Tag = "v" + $line.Matches[0].Groups[1].Value.Trim()
@@ -66,7 +71,7 @@ try
 catch
 {
 	Remove-Item -Recurse -Force $temporary -ErrorAction SilentlyContinue
-	Write-Error @"
+	$host.UI.WriteErrorLine(@"
 $assetName を $Tag から取得できませんでした。
 
 リリースに Windows バイナリが添付されていない可能性があります
@@ -78,7 +83,7 @@ $assetName を $Tag から取得できませんでした。
 
 なお 2 を選ぶ場合、submodule (src/main/native/whisper) が指すバージョンと
 jextract の生成物が一致するので、そちらの方が安全です。
-"@
+"@)
 	exit 1
 }
 
@@ -88,7 +93,7 @@ $libraries = Get-ChildItem -Path $temporary -Recurse -File -Include "whisper.dll
 if($libraries.Count -eq 0)
 {
 	Remove-Item -Recurse -Force $temporary -ErrorAction SilentlyContinue
-	Write-Error "$assetName に whisper.dll / ggml*.dll が入っていません。"
+	$host.UI.WriteErrorLine("$assetName に whisper.dll / ggml*.dll が入っていません。")
 	exit 1
 }
 

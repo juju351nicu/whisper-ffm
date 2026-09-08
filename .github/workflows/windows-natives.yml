@@ -31,27 +31,41 @@ jobs:
         steps:
             -   uses: actions/checkout@v4
                 with:
-                    submodules: true
+                    # 公式バイナリが無いバージョンでは submodule から CMake でビルドするので
+                    # 中の依存（ggml 等）まで必要。recursive にしておく。
+                    submodules: recursive
             -   uses: actions/setup-java@v5
                 with:
                     java-version: 25
                     distribution: 'temurin'
 
-            # shell: powershell（Windows PowerShell 5.1）は、Actions が YAML から書き出す
-            # スクリプトファイルを BOM 無し = ANSI として読むため、非 ASCII 文字が化けて
+            # shell は pwsh（PowerShell 7）を使う。shell: powershell（5.1）だと、Actions が
+            # YAML から書き出すスクリプトを BOM 無し = ANSI として読むため非 ASCII が化け、
             # 引用符の対応が崩れる（The string is missing the terminator: " で落ちた）。
-            # pwsh（PowerShell 7）は既定が UTF-8 なので使う。念のため、ここに書く
-            # メッセージ自体も ASCII に留める。
+            # ここに書くメッセージも念のため ASCII に留める。
+            #
+            # 成否の判定は終了コードではなく「natives\whisper.dll ができたか」で行う。
+            # 呼ぶスクリプトが終了エラーを投げるかどうかに依存しないため、この方が壊れにくい。
+            # v1.9.3 には公式の Windows バイナリが無いので、実際には毎回ビルド側を通る。
             -   name: Fetch natives (official release, fall back to building the submodule)
                 shell: pwsh
                 run: |
-                    .\scripts\download-natives.ps1
-                    if($LASTEXITCODE -ne 0)
+                    $ErrorActionPreference = 'Continue'
+                    try { & .\scripts\download-natives.ps1 } catch { Write-Host "download step raised: $_" }
+
+                    if(Test-Path 'natives\whisper.dll')
+                    {
+                        Write-Host "Using the official release binaries"
+                    }
+                    else
                     {
                         Write-Host "No official binaries for this tag - building the submodule instead"
-                        .\scripts\build-whisper.ps1
+                        & .\scripts\build-whisper.ps1
                         if($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                        if(-not (Test-Path 'natives\whisper.dll')) { throw "natives\whisper.dll was not produced" }
                     }
+
+                    Get-ChildItem natives -File | ForEach-Object { Write-Host ("  {0} ({1:N0} bytes)" -f $_.Name, $_.Length) }
 
             -   name: Download test models
                 shell: pwsh
