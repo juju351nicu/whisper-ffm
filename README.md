@@ -205,7 +205,7 @@ WhisperConfig config = WhisperConfig.builder()
         .model(model)
         .language("ja")
         .suppressNonSpeechTokens(true)   // 注記を出さない
-        .initialPrompt("姓Cさん、姓Dさんが参加する定例会議です。")
+        .initialPrompt("田中さん、鈴木さんが参加する定例会議です。")
         .build();
 ```
 

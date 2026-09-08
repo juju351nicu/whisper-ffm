@@ -154,6 +154,11 @@ whisper-ffm/
 
 - 公開パッケージは `jp.clip.whisper` だけ。利用側が触る型は 6 つ（README のクラス構成表）。
 - Maven 座標: `jp.clip:whisper-ffm:<version>`
+- **`gradle.properties` の version を上げたら `v<バージョン>` のタグを打って push する**（例 `v2.0.2`）。
+  利用側の transcribe-shell の CI が `actions/checkout` の `ref:` でこのタグを固定して参照しているため、
+  タグが無いとそちらの CI が落ちる。
+- **公開リポジトリなので、README や `docs/` に実名・実録音のファイル名・文字起こしの実内容を書かない。**
+  実測値は録音名を `sample-a` などの符号に、姓を「姓A」「姓B」…に匿名化して載せる（数値は実測のまま）。
 - `settings.gradle` で `rootProject.name` を固定している。**消さないこと。**
   無いとフォルダ名が artifactId になり、座標がクローン場所に依存する。
 - `.gitmodules` の submodule パスは変更しない。submodule は
