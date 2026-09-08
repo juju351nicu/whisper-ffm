@@ -75,9 +75,13 @@ final class NativeRuntime
 			NativeLogBridge.install(NATIVE_LOG);
 			nativesLoaded = true;
 		}
-		catch(IOException | RuntimeException e)
+		// LinkageError も捕まえる。System.load は UnsatisfiedLinkError（Error であって Exception ではない）を
+		// 投げるので、これを漏らすと WhisperEngine#open の「WhisperException を投げる」という契約が破れる。
+		// 利用側は catch(Exception) で拾えず、バッチ処理などが突き抜けて止まってしまう。
+		catch(IOException | RuntimeException | LinkageError e)
 		{
-			throw new WhisperException("ネイティブライブラリの読み込みに失敗しました。", e);
+			throw new WhisperException("ネイティブライブラリの読み込みに失敗しました。"
+					+ " この OS / アーキテクチャ用のライブラリが jar に同梱されていないか、依存 DLL が足りない可能性があります。", e);
 		}
 	}
 

@@ -301,6 +301,20 @@ submodule が指すバージョンでテストできないので、**本家の C
   旧履歴は `v1-jni` ブランチとタグ `1.9.3-2` として残す（消す判断は後でよい）。
   ※ 別 AI の提案どおり「新しいリポジトリ名にする」選択もある。名前を変えるなら P3 の前に決める。
 
+#### 追記 2.0.2 — `UnsatisfiedLinkError` が契約を破っていた（2026-09-08）
+
+`WhisperEngine#open` の Javadoc は「ネイティブのロードに失敗したら `WhisperException`」と書いてあるのに、
+`NativeRuntime` の `catch(IOException | RuntimeException)` は `UnsatisfiedLinkError` を捕まえていなかった。
+`UnsatisfiedLinkError` は `Error` であって `Exception` ではないため、`System.load` の失敗がそのまま突き抜ける。
+
+利用側での症状はこうなる。1 ファイルずつ処理するコマンドは `catch(UnsatisfiedLinkError)` を自分で書いていれば
+拾えるが、`catch(Exception)` で 1 件の失敗を飲み込んで次に進むバッチ処理は**捕まえられずに止まる**。
+transcribe-shell の `transcribe-ffm-all` が実際にこの形だった。
+
+`catch(IOException | RuntimeException | LinkageError e)` に直した。`LinkageError` にしたのは
+`UnsatisfiedLinkError` だけでなく `NoClassDefFoundError` なども同じ扱いでよいため。
+ライブラリ側で包んだので、利用側は `WhisperException`（`RuntimeException`）だけを見ればよくなる。
+
 ### P4. その後（別計画）
 
 - VAD を「区間の切り出し」だけに使い、区間ごとに `whisper_full` を呼ぶ方式（繋ぎ合わせない）。

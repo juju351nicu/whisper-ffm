@@ -8,7 +8,7 @@ Java 22 の **FFM（Foreign Function &amp; Memory API、`java.lang.foreign`）**
 |---|---|
 | whisper.cpp | **v1.9.3**（`src/main/native/whisper` submodule に固定） |
 | Maven 座標 | `jp.clip:whisper-ffm` |
-| バージョン | `2.0.1` |
+| バージョン | `2.0.2` |
 | ビルド JDK | Java 25 |
 | Gradle | 9.7.1（wrapper 同梱） |
 | 生成バイトコード | **Java 22**（FFM が正式版になったバージョン） |
@@ -66,7 +66,7 @@ Maven Central には公開していません。ローカルにインストール
 <dependency>
     <groupId>jp.clip</groupId>
     <artifactId>whisper-ffm</artifactId>
-    <version>2.0.1</version>
+    <version>2.0.2</version>
 </dependency>
 ```
 
@@ -79,7 +79,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'jp.clip:whisper-ffm:2.0.1'
+    implementation 'jp.clip:whisper-ffm:2.0.2'
 }
 ```
 
