@@ -8,7 +8,7 @@ Java 22 の **FFM（Foreign Function &amp; Memory API、`java.lang.foreign`）**
 |---|---|
 | whisper.cpp | **v1.9.3**（`src/main/native/whisper` submodule に固定） |
 | Maven 座標 | `jp.clip:whisper-ffm` |
-| バージョン | `2.0.0` |
+| バージョン | `2.0.1` |
 | ビルド JDK | Java 25 |
 | Gradle | 9.7.1（wrapper 同梱） |
 | 生成バイトコード | **Java 22**（FFM が正式版になったバージョン） |
@@ -31,8 +31,13 @@ whisper.cpp の関数は、jextract が `whisper.h` から生成したバイン�
 
 ## 対応プラットフォーム
 
-Windows x64 / macOS（x64・arm64）/ Linux（x64・arm64）。jar には、ビルド時に
-`src/main/resources/<os>-<arch>/` へ置いたネイティブが同梱されます。
+コードは Windows x64 / macOS（x64・arm64）/ Linux（x64・arm64）に対応しています
+（`Platform` が OS と CPU を判定し、`src/main/resources/<os>-<arch>/` から取り出します）。
+
+ただし**CI で検証しているのは Windows x64 だけ**です。他のプラットフォームは、
+そのマシンでネイティブを用意（公式バイナリの取得、または submodule のビルド）してから
+`installNatives publishToMavenLocal` する必要があり、まだ自動検証していません。
+公開している jar にも Windows 用のネイティブしか入っていません。
 
 GPU 版（Vulkan / CUDA）を使いたい場合は、そのビルドのライブラリを置いたディレクトリを
 `WhisperConfig.nativeLibraryDirectory(path)` で指定してください。
@@ -56,7 +61,7 @@ Maven Central には公開していません。ローカルにインストール
 <dependency>
     <groupId>jp.clip</groupId>
     <artifactId>whisper-ffm</artifactId>
-    <version>2.0.0</version>
+    <version>2.0.1</version>
 </dependency>
 ```
 
@@ -69,7 +74,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'jp.clip:whisper-ffm:2.0.0'
+    implementation 'jp.clip:whisper-ffm:2.0.1'
 }
 ```
 

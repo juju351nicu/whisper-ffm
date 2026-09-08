@@ -13,12 +13,16 @@ on:
     push:
         branches: [main]
         tags: ['v*']
+        # ドキュメントだけの変更では走らせない。コードとビルド設定は全部見る
+        # （以前は src/main/java/jp/clip/whisper/ffm/** だけだったので、WhisperEngine や
+        #  NativeSession を直しても CI が走らなかった）。
         paths:
-            - 'scripts/download-natives.ps1'
-            - 'scripts/build-whisper.ps1'
-            - 'scripts/jextract-whisper.ps1'
-            - 'src/main/java/jp/clip/whisper/ffm/**'
+            - 'src/**'
+            - 'scripts/**'
+            - 'build.gradle'
+            - 'settings.gradle'
             - 'gradle.properties'
+            - 'gradle/**'
             - '.github/workflows/windows-natives.yml'
 
 jobs:
@@ -28,24 +32,29 @@ jobs:
             -   uses: actions/checkout@v4
                 with:
                     submodules: true
-            -   uses: actions/setup-java@v4
+            -   uses: actions/setup-java@v5
                 with:
                     java-version: 25
                     distribution: 'temurin'
 
+            # shell: powershell（Windows PowerShell 5.1）は、Actions が YAML から書き出す
+            # スクリプトファイルを BOM 無し = ANSI として読むため、非 ASCII 文字が化けて
+            # 引用符の対応が崩れる（The string is missing the terminator: " で落ちた）。
+            # pwsh（PowerShell 7）は既定が UTF-8 なので使う。念のため、ここに書く
+            # メッセージ自体も ASCII に留める。
             -   name: Fetch natives (official release, fall back to building the submodule)
-                shell: powershell
+                shell: pwsh
                 run: |
                     .\scripts\download-natives.ps1
                     if($LASTEXITCODE -ne 0)
                     {
-                        Write-Host "公式バイナリが無いので submodule からビルドします"
+                        Write-Host "No official binaries for this tag - building the submodule instead"
                         .\scripts\build-whisper.ps1
                         if($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
                     }
 
             -   name: Download test models
-                shell: powershell
+                shell: pwsh
                 run: |
                     .\scripts\download-test-model.ps1
                     .\scripts\download-vad-model.ps1

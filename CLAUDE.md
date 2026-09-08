@@ -136,7 +136,7 @@ whisper.cpp の submodule を更新したときの手順:
 
 ```
 whisper-ffm/
-├── .github/workflows/            CI。windows-natives.yml（ネイティブ取得 + テスト）
+├── .github/workflows/            CI。windows-natives.yml（ネイティブ取得 + テスト。Windows x64 のみ）
 ├── docs/                         plan-ffm-v2.md（v2 の計画と実施記録）、ffm-p0-report.md（生成 API の資料）
 ├── scripts/                      ネイティブ取得・バインディング生成・モデル取得
 ├── models/                       計測用モデルの置き場所（ggml-*.bin は gitignore）

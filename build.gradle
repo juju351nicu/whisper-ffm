@@ -119,10 +119,25 @@ tasks.configureEach { Task task ->
 }
 
 // Apache-2.0 では、配布物に LICENSE と NOTICE を含める必要がある。
+def whisperCppLicense = rootProject.file('src/main/native/whisper/LICENSE')
+
 tasks.named('jar', Jar) {
+    // 同梱するネイティブ、VAD モデル、GbnfGrammar の移植元はいずれも whisper.cpp（MIT）。
+    // MIT はライセンス全文の同梱を求めるので、submodule の LICENSE も jar に入れる。
+    // submodule が未初期化だと黙って抜け落ちるため、明示的に失敗させる。
+    doFirst {
+        if (!whisperCppLicense.exists()) {
+            throw new GradleException("whisper.cpp の LICENSE が見つかりません: ${whisperCppLicense}"
+                    + "\n  git submodule update --init --recursive を実行してください（MIT 全文は jar に必須）")
+        }
+    }
+
     metaInf {
         from(rootProject.file('LICENSE'))
         from(rootProject.file('NOTICE'))
+        from(whisperCppLicense) {
+            rename { 'LICENSE-whisper.cpp.txt' }
+        }
     }
 }
 
