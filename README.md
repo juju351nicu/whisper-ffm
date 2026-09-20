@@ -24,7 +24,7 @@ whisper.cpp の関数は、jextract が `whisper.h` から生成したバイン�
   公式リリースに OS 用のバイナリが添付されていればそれをそのまま置けます。添付が無いタグ
   （v1.9.3 の Windows がこれ）では whisper.cpp 自体を CMake でビルドしますが、それは本家の
   ビルド手順そのままで、こちらで保守する C++ コードはありません
-  （`scripts/build-whisper.ps1` と `.github/workflows/windows-natives.yml` が自動でやります）。
+  （Windows は `scripts/build-whisper.ps1`、Linux は `scripts/build-whisper.sh` が自動でやります）。
 - **whisper.cpp の更新に追従しやすい。** submodule を進めて
   `scripts/jextract-whisper.ps1` を実行するだけで、シグネチャや構造体レイアウトの変更が
   コンパイルエラーとして出ます。
@@ -39,10 +39,12 @@ whisper.cpp の関数は、jextract が `whisper.h` から生成したバイン�
 コードは Windows x64 / macOS（x64・arm64）/ Linux（x64・arm64）に対応しています
 （`Platform` が OS と CPU を判定し、`src/main/resources/<os>-<arch>/` から取り出します）。
 
-ただし**CI で検証しているのは Windows x64 だけ**です。他のプラットフォームは、
-そのマシンでネイティブを用意（公式バイナリの取得、または submodule のビルド）してから
-`installNatives publishToMavenLocal` する必要があり、まだ自動検証していません。
-公開している jar にも Windows 用のネイティブしか入っていません。
+**Windows x64 と Linux x64 は CI で検証します。** Linux は固定済みの whisper.cpp submodule を
+CMake でビルドし、ライブラリ単体のテストに加えて jar から取り出す経路もスモークテストします。
+macOS と Linux arm64 はコード上の判定・配置先には対応していますが、まだ自動検証していません。
+
+ローカル Maven に入る jar には、`installNatives` を実行した OS / CPU 用のネイティブが入ります。
+別 OS のネイティブを含む jar が必要な場合は、その OS 上でビルドして公開し直してください。
 
 GPU 版（Vulkan / CUDA）を使いたい場合は、そのビルドのライブラリを置いたディレクトリを
 `WhisperConfig.nativeLibraryDirectory(path)` で指定してください。
@@ -51,9 +53,20 @@ GPU 版（Vulkan / CUDA）を使いたい場合は、そのビルドのライブ
 
 Maven Central には公開していません。ローカルにインストールして使います。
 
+Windows:
+
 ```powershell
 .\scripts\download-natives.ps1                      # 公式バイナリを natives\ へ
 .\gradlew.bat installNatives publishToMavenLocal     # jar に同梱して ~/.m2 へ
+```
+
+Ubuntu / Linux x64:
+
+```bash
+sudo apt install cmake build-essential
+git submodule update --init --recursive
+./scripts/build-whisper.sh
+./gradlew installNatives publishToMavenLocal
 ```
 
 `installNatives` は実行中の OS に合わせて `natives/` から `src/main/resources/<os>-<arch>/` へ
@@ -228,7 +241,8 @@ whisper.cpp の GBNF 解析器は `examples/` にあり共有ライブラリに�
 ## ビルドとテスト
 
 必要なもの: **JDK 25**（`JAVA_HOME` がそれを指していること）。Gradle は wrapper が提供します。
-C++ のツールチェーンは、公式バイナリを使う限り不要です。
+Windows で公式バイナリを使う場合は C++ ツールチェーン不要です。Linux 版は固定済み submodule を
+ビルドするため、CMake と C++ コンパイラが必要です。
 
 ```powershell
 git submodule update --init --recursive
@@ -242,6 +256,19 @@ git submodule update --init --recursive
 Move-Item .\ggml-silero-v6.2.0.bin .\src\main\resources\ -Force
 
 .\gradlew.bat test
+```
+
+Ubuntu / Linux x64 では次の順です。
+
+```bash
+sudo apt install cmake build-essential
+git submodule update --init --recursive
+./scripts/build-whisper.sh
+./scripts/download-test-model.sh
+./scripts/download-vad-model.sh
+mv ./ggml-silero-v6.2.0.bin ./src/main/resources/
+./gradlew test
+./gradlew installNatives jar smokeTestBundledNatives
 ```
 
 処理速度の計測は次のとおりです（詳細は `src/test/java/jp/clip/whisper/Benchmark.java` の Javadoc）。

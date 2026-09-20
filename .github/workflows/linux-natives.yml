@@ -1,0 +1,62 @@
+# Linux x64 用ネイティブを submodule からビルドし、ライブラリ単体と jar 同梱経路を検証する。
+name: Linux natives
+
+on:
+    workflow_dispatch:
+    push:
+        branches: [main]
+        tags: ['v*']
+        paths:
+            - 'src/**'
+            - 'scripts/**'
+            - 'build.gradle'
+            - 'settings.gradle'
+            - 'gradle.properties'
+            - 'gradle/**'
+            - '.github/workflows/linux-natives.yml'
+
+permissions:
+    contents: read
+    checks: write
+
+jobs:
+    natives:
+        runs-on: ubuntu-latest
+        steps:
+            -   uses: actions/checkout@v4
+                with:
+                    submodules: recursive
+
+            -   uses: actions/setup-java@v5
+                with:
+                    java-version: 25
+                    distribution: temurin
+
+            -   name: Build Linux natives
+                run: ./scripts/build-whisper.sh
+
+            -   name: Download test models
+                run: |
+                    ./scripts/download-test-model.sh
+                    ./scripts/download-vad-model.sh
+                    mv ./ggml-silero-v6.2.0.bin ./src/main/resources/
+
+            -   name: Test
+                run: ./gradlew test
+
+            -   name: Publish test report
+                uses: mikepenz/action-junit-report@v5
+                if: success() || failure()
+                with:
+                    report_paths: '**/build/test-results/**/*.xml'
+
+            -   name: Smoke test the natives bundled in the jar
+                run: ./gradlew installNatives jar smokeTestBundledNatives
+
+            -   name: Upload natives
+                uses: actions/upload-artifact@v4
+                if: success() || failure()
+                with:
+                    name: linux-x64-natives
+                    path: natives/*.so*
+                    retention-days: 30
